@@ -1,0 +1,284 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acompanhamento de emagrecimento</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { 
+            --primary: #4a90e2; --secondary: #2ecc71; --warning: #f1c40f; 
+            --danger: #e74c3c; --bg: #f8fafc; --card-bg: #ffffff; 
+        }
+        
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #2d3748; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; max-width: 1400px; margin: 0 auto; }
+        
+        .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .card-full { grid-column: 1 / -1; }
+        
+        h2 { margin-top: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; }
+        
+        /* Água */
+        .water-container { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .glass { cursor: pointer; font-size: 1.5rem; transition: transform 0.2s; filter: grayscale(1); opacity: 0.3; }
+        .glass.active { filter: grayscale(0); opacity: 1; transform: scale(1.1); }
+        .progress-water { height: 8px; background: #e2e8f0; border-radius: 4px; margin-top: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.4s; }
+        
+        /* Bio-Perfil / TMB */
+        .tmb-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 12px; margin-top: 15px; }
+
+        /* Inputs e Botões */
+        label { font-weight: bold; display: block; margin-top: 12px; font-size: 0.85em; }
+        input, textarea, select { width: 100%; margin-top: 5px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; margin-top: 10px; padding: 12px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-salvar { background: var(--secondary); color: white; }
+        .btn-exportar { background: #fff; color: var(--primary); border: 2px solid var(--primary); }
+        .btn-add { background: #edf2f7; color: #4a5568; font-size: 0.8em; width: auto; padding: 5px 12px; border: 1px solid #cbd5e0; }
+        
+        /* Histórico */
+        .registro { border-left: 5px solid var(--primary); padding: 15px; background: #fff; margin-bottom: 15px; border-radius: 0 12px 12px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative;}
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.75em; color: white; font-weight: bold; margin-right: 5px; margin-bottom: 5px; }
+        .refeicao-box { background: #f8fafc; padding: 12px; border-radius: 10px; margin-top: 10px; border: 1px solid #edf2f7; }
+        .extra-meal { border-left: 3px solid var(--warning); padding-left: 10px; margin-top: 10px; background: #fffaf0; font-size: 0.85em; padding: 8px; border-radius: 0 6px 6px 0; }
+        .btn-excluir { position: absolute; right: 10px; top: 10px; background: none; color: #cbd5e0; border: none; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="card card-full">
+            <h2>📈 Evolução do Peso</h2>
+            <div style="height: 250px;"><canvas id="weightChart"></canvas></div>
+        </div>
+
+        <div class="card">
+            <h2>👤 Bio-Perfil</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div><label>Altura (m)</label><input type="number" id="perfil_altura" step="0.01" placeholder="1.70" onchange="atualizarTMB()"></div>
+                <div><label>Idade</label><input type="number" id="perfil_idade" placeholder="30" onchange="atualizarTMB()"></div>
+            </div>
+            <label>Sexo</label>
+            <select id="perfil_sexo" onchange="atualizarTMB()">
+                <option value="M">Masculino</option>
+                <option value="F">Feminino</option>
+            </select>
+            
+            <div class="tmb-box">
+                <small>Gasto Calórico Estimado (TMB):</small>
+                <div style="font-size: 1.5rem; font-weight: bold;"><span id="valorTMB">0</span> kcal/dia</div>
+            </div>
+            <button class="btn-exportar" onclick="exportarCSV()">📥 Exportar para Excel</button>
+        </div>
+
+        <div class="card">
+            <h2>📝 Registro Diário</h2>
+            <input type="date" id="dataRegistro">
+            
+            <div style="display:flex; gap:10px">
+                <div style="flex:1"><label>Peso (kg):</label><input type="number" id="peso" step="0.1"></div>
+                <div style="flex:1"><label>Água (Clique 🥛):</label>
+                    <div class="water-container" id="waterTrack"></div>
+                    <div class="progress-water"><div class="progress-fill" id="waterFill"></div></div>
+                    <input type="hidden" id="aguaValor" value="0">
+                </div>
+            </div>
+
+            <h3>🍽️ Alimentação Base</h3>
+            <input type="text" id="Cafe" placeholder="☕ Café">
+            <input type="text" id="Almoco" placeholder="🍽️ Almoço">
+            <input type="text" id="CafeTarde" placeholder="☕ Café da tarde">
+            <input type="text" id="Jantar" placeholder="🍲 Jantar">
+            
+            <div id="containerExtras">
+                <label>Refeições Adicionais:</label>
+            </div>
+            <button type="button" class="btn-add" onclick="addCampoExtra()">+ Refeição Extra</button>
+
+            <label style="margin-top:15px"><input type="checkbox" id="treinou" style="width:auto"> Treinei hoje</label>
+            <textarea id="exercicio" rows="2" placeholder="O que treinou?"></textarea>
+            
+            <button class="btn-salvar" onclick="salvarDados()">💾 Salvar Registro</button>
+        </div>
+
+        <div class="card card-full">
+            <h2>📅 Histórico de Atividades</h2>
+            <div id="listaRegistros"></div>
+        </div>
+    </div>
+
+    <script>
+        let myChart;
+        let coposSelecionados = 0;
+
+        window.onload = () => {
+            document.getElementById('perfil_altura').value = localStorage.getItem('h_altura') || '';
+            document.getElementById('perfil_idade').value = localStorage.getItem('h_idade') || '';
+            document.getElementById('perfil_sexo').value = localStorage.getItem('h_sexo') || 'M';
+            document.getElementById('dataRegistro').valueAsDate = new Date();
+            
+            gerarCopos();
+            atualizarInterface();
+        };
+
+        function gerarCopos() {
+            const container = document.getElementById('waterTrack');
+            container.innerHTML = '';
+            for(let i=1; i<=12; i++) {
+                const span = document.createElement('span');
+                span.className = 'glass';
+                span.innerHTML = '🥛';
+                span.onclick = () => marcarCopo(i);
+                container.appendChild(span);
+            }
+        }
+
+        function marcarCopo(num) {
+            coposSelecionados = num;
+            document.querySelectorAll('.glass').forEach((c, idx) => {
+                idx < num ? c.classList.add('active') : c.classList.remove('active');
+            });
+            const litros = (num * 0.25).toFixed(2);
+            document.getElementById('aguaValor').value = litros;
+            document.getElementById('waterFill').style.width = (num / 12 * 100) + '%';
+        }
+
+        function addCampoExtra() {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'input-extra';
+            input.placeholder = 'Ex: Lanche...';
+            input.style.marginTop = '5px';
+            document.getElementById('containerExtras').appendChild(input);
+        }
+
+        function atualizarTMB() {
+            const regs = JSON.parse(localStorage.getItem('meuRegime')) || [];
+            const peso = regs.length > 0 ? parseFloat(regs[0].peso) : 70;
+            const altura = parseFloat(document.getElementById('perfil_altura').value) * 100;
+            const idade = parseInt(document.getElementById('perfil_idade').value);
+            const sexo = document.getElementById('perfil_sexo').value;
+
+            localStorage.setItem('h_altura', document.getElementById('perfil_altura').value);
+            localStorage.setItem('h_idade', idade || '');
+            localStorage.setItem('h_sexo', sexo);
+
+            if(peso && altura && idade) {
+                let tmb = (10 * peso) + (6.25 * altura) - (5 * idade);
+                tmb = (sexo === 'M') ? tmb + 5 : tmb - 161;
+                document.getElementById('valorTMB').innerText = Math.round(tmb);
+            }
+        }
+
+        function salvarDados() {
+            const peso = document.getElementById('peso').value;
+            const dataSel = document.getElementById('dataRegistro').value;
+            if(!peso || !dataSel) return alert("Peso e data são obrigatórios!");
+
+            const extras = Array.from(document.querySelectorAll('.input-extra')).map(i => i.value).filter(v => v);
+
+            const novo = {
+                dataOriginal: dataSel,
+                dataExibicao: dataSel.split('-').reverse().join('/'),
+                peso: peso,
+                agua: document.getElementById('aguaValor').value,
+                cafe: document.getElementById('Cafe').value,
+                almoco: document.getElementById('Almoco').value,
+                tarde: document.getElementById('CafeTarde').value,
+                jantar: document.getElementById('Jantar').value,
+                extras: extras,
+                treinou: document.getElementById('treinou').checked ? "Sim" : "Não",
+                exercicio: document.getElementById('exercicio').value
+            };
+
+            let regs = JSON.parse(localStorage.getItem('meuRegime')) || [];
+            regs.unshift(novo);
+            regs.sort((a,b) => new Date(b.dataOriginal) - new Date(a.dataOriginal));
+            localStorage.setItem('meuRegime', JSON.stringify(regs));
+            
+            // Limpeza e Recarregamento
+            document.querySelectorAll('input:not([type="date"]):not([id^="perfil"]), textarea').forEach(i => i.value = '');
+            document.getElementById('containerExtras').innerHTML = '<label>Refeições Adicionais:</label>';
+            document.getElementById('treinou').checked = false;
+            marcarCopo(0);
+            
+            atualizarInterface();
+        }
+
+        function exportarCSV() {
+            const regs = JSON.parse(localStorage.getItem('meuRegime')) || [];
+            if(regs.length === 0) return alert("Sem dados para exportar!");
+            
+            let csv = "\uFEFFData;Peso;Agua;Treino;Exercicio\n";
+            regs.forEach(r => {
+                csv += `${r.dataExibicao};${r.peso};${r.agua};${r.treinou};${r.exercicio}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "historico_saude.csv";
+            link.click();
+        }
+
+        function atualizarGrafico(regs) {
+            const ctx = document.getElementById('weightChart').getContext('2d');
+            const dados = [...regs].reverse().slice(-10);
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dados.map(r => r.dataExibicao),
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: dados.map(r => r.peso),
+                        borderColor: '#4a90e2',
+                        backgroundColor: 'rgba(74, 144, 226, 0.1)',
+                        fill: true, tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function atualizarInterface() {
+            const regs = JSON.parse(localStorage.getItem('meuRegime')) || [];
+            const lista = document.getElementById('listaRegistros');
+            atualizarGrafico(regs);
+            atualizarTMB();
+
+            lista.innerHTML = regs.map((reg, i) => `
+                <div class="registro" style="${reg.treinou === 'Sim' ? 'border-left-color: var(--secondary)' : ''}">
+                    <button class="btn-excluir" onclick="excluir(${i})">✕</button>
+                    <strong class="data-header">📅 ${reg.dataExibicao}</strong>
+                    <span class="badge" style="background:#2d3748">⚖️ ${reg.peso}kg</span>
+                    <span class="badge" style="background:#3498db">💧 ${reg.agua}L</span>
+                    
+                    <div class="refeicao-box">
+                        ${reg.cafe ? `<div class="refeicao-item">☕ <b>Café:</b> ${reg.cafe}</div>` : ''}
+                        ${reg.almoco ? `<div class="refeicao-item">🍽️ <b>Almoço:</b> ${reg.almoco}</div>` : ''}
+                        ${reg.tarde ? `<div class="refeicao-item">☕ <b>Tarde:</b> ${reg.tarde}</div>` : ''}
+                        ${reg.jantar ? `<div class="refeicao-item">🍲 <b>Jantar:</b> ${reg.jantar}</div>` : ''}
+                        ${reg.extras && reg.extras.length > 0 ? `<div class="extra-meal"><b>➕ Extras:</b><br>${reg.extras.join('<br>')}</div>` : ''}
+                    </div>
+
+                    <div style="font-size: 0.9em; margin-top:10px; color: #4a5568;">
+                        <b>💪 Treino:</b> ${reg.exercicio || reg.treinou}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function excluir(i) {
+            if(confirm("Excluir este dia?")) {
+                let regs = JSON.parse(localStorage.getItem('meuRegime'));
+                regs.splice(i, 1);
+                localStorage.setItem('meuRegime', JSON.stringify(regs));
+                atualizarInterface();
+            }
+        }
+    </script>
+</body>
+</html>
